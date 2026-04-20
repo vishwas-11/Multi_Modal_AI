@@ -1,5 +1,5 @@
 import { UploadApiResponse, UploadApiOptions } from 'cloudinary';
-import { cloudinary } from '../config/cloudinary';
+import { cloudinary, isCloudinaryConfigured } from '../config/cloudinary';
 
 export interface CloudinaryUploadResult {
   url: string;
@@ -19,6 +19,12 @@ export const uploadToCloudinary = (
   fileBuffer: Buffer,
   options: Partial<UploadApiOptions> = {}
 ): Promise<CloudinaryUploadResult> => {
+  if (!isCloudinaryConfigured()) {
+    throw new Error(
+      'Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET.'
+    );
+  }
+
   return new Promise((resolve, reject) => {
     const uploadOptions: UploadApiOptions = {
       folder: 'multimodal-ai',
@@ -61,6 +67,12 @@ export const uploadFilePathToCloudinary = async (
   filePath: string,
   options: Partial<UploadApiOptions> = {}
 ): Promise<CloudinaryUploadResult> => {
+  if (!isCloudinaryConfigured()) {
+    throw new Error(
+      'Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET.'
+    );
+  }
+
   const result = await cloudinary.uploader.upload(filePath, {
     folder: 'multimodal-ai',
     resource_type: 'auto',
@@ -86,6 +98,8 @@ export const deleteFromCloudinary = async (
   publicId: string,
   resourceType: 'image' | 'video' | 'raw' = 'image'
 ): Promise<void> => {
+  if (!isCloudinaryConfigured()) return;
+
   try {
     await cloudinary.uploader.destroy(publicId, {
       resource_type: resourceType,
@@ -102,6 +116,12 @@ export const getTransformedUrl = (
   publicId: string,
   transformations: Record<string, string | number>
 ): string => {
+  if (!isCloudinaryConfigured()) {
+    throw new Error(
+      'Cloudinary is not configured. Cannot generate transformed URLs without Cloudinary credentials.'
+    );
+  }
+
   return cloudinary.url(publicId, {
     secure: true,
     ...transformations,

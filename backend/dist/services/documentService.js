@@ -3,13 +3,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.cleanupDocumentTemp = exports.buildStructuredExtractionPrompt = exports.buildMultiPageContextPrompt = exports.parseMarkdownTable = exports.processImageDocument = exports.processDocumentImagePage = exports.extractTextFromDocument = exports.downloadDocumentToTemp = exports.getDocumentType = void 0;
+exports.cleanupDocumentTemp = exports.buildStructuredExtractionPrompt = exports.buildMultiPageContextPrompt = exports.parseMarkdownTable = exports.processImageDocument = exports.processDocumentImagePage = exports.extractTextFromDocument = exports.downloadDocumentToTempWithFallback = exports.downloadDocumentToTemp = exports.getDocumentType = void 0;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const axios_1 = __importDefault(require("axios"));
 const uuid_1 = require("uuid");
 const sharp_1 = __importDefault(require("sharp"));
 const fileUtils_1 = require("../utils/fileUtils");
+const cloudinaryService_1 = require("./cloudinaryService");
 /**
  * Detect document type from mime type
  */
@@ -40,6 +41,30 @@ const downloadDocumentToTemp = async (url, mimeType) => {
     return tempPath;
 };
 exports.downloadDocumentToTemp = downloadDocumentToTemp;
+const downloadDocumentToTempWithFallback = async (url, mimeType, publicId) => {
+    try {
+        return await (0, exports.downloadDocumentToTemp)(url, mimeType);
+    }
+    catch (error) {
+        if (!axios_1.default.isAxiosError(error) || error.response?.status !== 401 || !publicId) {
+            throw error;
+        }
+        const format = getExtFromMime(mimeType).replace('.', '') || 'bin';
+        try {
+            const privateDownloadUrl = (0, cloudinaryService_1.getPrivateDownloadUrl)(publicId, format, 'raw', 'upload');
+            return await (0, exports.downloadDocumentToTemp)(privateDownloadUrl, mimeType);
+        }
+        catch (fallbackError) {
+            if (!axios_1.default.isAxiosError(fallbackError) || fallbackError.response?.status !== 401) {
+                throw fallbackError;
+            }
+            // Some Cloudinary setups store restricted raw assets as authenticated delivery type.
+            const authDownloadUrl = (0, cloudinaryService_1.getPrivateDownloadUrl)(publicId, format, 'raw', 'authenticated');
+            return (0, exports.downloadDocumentToTemp)(authDownloadUrl, mimeType);
+        }
+    }
+};
+exports.downloadDocumentToTempWithFallback = downloadDocumentToTempWithFallback;
 const getExtFromMime = (mime) => {
     const map = {
         'application/pdf': '.pdf',

@@ -5,6 +5,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.cleanupVideoTemp = exports.processVideoForAnalysis = exports.downloadVideoToTemp = exports.extractAudioFromVideo = exports.processFramesForAI = exports.extractFrames = exports.getVideoMetadata = void 0;
 const fluent_ffmpeg_1 = __importDefault(require("fluent-ffmpeg"));
+const ffmpeg_static_1 = __importDefault(require("ffmpeg-static"));
+const ffprobe_static_1 = __importDefault(require("ffprobe-static"));
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const axios_1 = __importDefault(require("axios"));
@@ -12,6 +14,13 @@ const uuid_1 = require("uuid");
 const imageService_1 = require("./imageService");
 const fileUtils_1 = require("../utils/fileUtils");
 const MAX_FRAMES = 20;
+const FFMPEG_TIMEOUT_MS = 120000;
+if (ffmpeg_static_1.default) {
+    fluent_ffmpeg_1.default.setFfmpegPath(ffmpeg_static_1.default);
+}
+if (ffprobe_static_1.default.path) {
+    fluent_ffmpeg_1.default.setFfprobePath(ffprobe_static_1.default.path);
+}
 /**
  * Get video metadata using ffprobe
  */
@@ -68,13 +77,14 @@ const getUniformTimestamps = (duration) => {
 const getSceneChangeTimestamps = async (videoPath, threshold = 0.3) => {
     return new Promise((resolve) => {
         const timestamps = [];
+        const nullOutput = process.platform === 'win32' ? 'NUL' : '/dev/null';
         (0, fluent_ffmpeg_1.default)(videoPath)
             .outputOptions([
             '-vf', `select='gt(scene,${threshold})',showinfo`,
             '-vsync', 'vfr',
             '-f', 'null',
         ])
-            .output('/dev/null')
+            .output(nullOutput)
             .on('stderr', (line) => {
             const match = line.match(/pts_time:([\d.]+)/);
             if (match) {
@@ -172,11 +182,25 @@ exports.extractAudioFromVideo = extractAudioFromVideo;
 // ─────────────────────────────────────────
 const downloadVideoToTemp = async (url) => {
     const tempPath = path_1.default.join(process.cwd(), 'src/uploads', `video-${(0, uuid_1.v4)()}.mp4`);
-    const response = await axios_1.default.get(url, {
-        responseType: 'arraybuffer',
-    });
-    await fs_1.default.promises.writeFile(tempPath, Buffer.from(response.data));
-    return tempPath;
+    let lastError;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            const response = await axios_1.default.get(url, {
+                responseType: 'arraybuffer',
+                timeout: FFMPEG_TIMEOUT_MS,
+                maxRedirects: 5,
+            });
+            await fs_1.default.promises.writeFile(tempPath, Buffer.from(response.data));
+            return tempPath;
+        }
+        catch (error) {
+            lastError = error;
+            if (attempt < 3) {
+                await new Promise((resolve) => setTimeout(resolve, attempt * 750));
+            }
+        }
+    }
+    throw lastError;
 };
 exports.downloadVideoToTemp = downloadVideoToTemp;
 const processVideoForAnalysis = async (videoUrl) => {

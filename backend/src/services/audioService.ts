@@ -188,7 +188,7 @@ export const analyzeAudioFromUrl = async (
       timeout: 60000,
     });
     await fs.promises.writeFile(tempPath, Buffer.from(response.data));
-    return analyzeAudioFull(tempPath, userPrompt, language);
+    return await analyzeAudioFull(tempPath, userPrompt, language);
   } finally {
     await deleteFile(tempPath);
   }

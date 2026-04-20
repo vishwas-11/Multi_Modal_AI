@@ -127,3 +127,45 @@ export const getTransformedUrl = (
     ...transformations,
   });
 };
+
+/**
+ * Get a signed delivery URL (useful when raw assets are ACL-restricted).
+ */
+export const getSignedDeliveryUrl = (
+  publicId: string,
+  resourceType: 'image' | 'video' | 'raw' = 'raw'
+): string => {
+  if (!isCloudinaryConfigured()) {
+    throw new Error(
+      'Cloudinary is not configured. Cannot generate signed delivery URLs without Cloudinary credentials.'
+    );
+  }
+
+  return cloudinary.url(publicId, {
+    secure: true,
+    sign_url: true,
+    resource_type: resourceType,
+    type: 'upload',
+  });
+};
+
+/**
+ * Get a private download URL for ACL-restricted assets.
+ */
+export const getPrivateDownloadUrl = (
+  publicId: string,
+  format: string,
+  resourceType: 'image' | 'video' | 'raw' = 'raw',
+  deliveryType: 'upload' | 'private' | 'authenticated' = 'upload'
+): string => {
+  if (!isCloudinaryConfigured()) {
+    throw new Error(
+      'Cloudinary is not configured. Cannot generate private download URLs without Cloudinary credentials.'
+    );
+  }
+
+  return cloudinary.utils.private_download_url(publicId, format, {
+    resource_type: resourceType,
+    type: deliveryType,
+  });
+};

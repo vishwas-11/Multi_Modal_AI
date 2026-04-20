@@ -22,7 +22,7 @@ const getClient = () => {
 const getVisionModel = () => {
     if (!visionModel) {
         visionModel = getClient().getGenerativeModel({
-            model: 'gemini-1.5-pro',
+            model: 'gemini-flash-latest',
             generationConfig: {
                 temperature: 0.4,
                 maxOutputTokens: 8192,

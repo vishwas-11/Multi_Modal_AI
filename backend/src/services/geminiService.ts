@@ -52,7 +52,7 @@ const getClient = () => {
 const getVisionModel = () => {
   if (!visionModel) {
     visionModel = getClient().getGenerativeModel({
-      model: 'gemini-1.5-pro',
+      model: 'gemini-flash-latest',
       generationConfig: {
         temperature: 0.4,
         maxOutputTokens: 8192,
@@ -65,7 +65,7 @@ const getVisionModel = () => {
 const getTextModel = () => {
   if (!textModel) {
     textModel = getClient().getGenerativeModel({
-      model: 'gemini-1.5-pro',
+      model: 'gemini-2.5-flash',
       generationConfig: {
         temperature: 0.7,
         maxOutputTokens: 8192,

@@ -20,7 +20,7 @@ const configureCloudinary = () => {
         secure: true,
     });
     cloudinaryConfigured = true;
-    console.log('✅ Cloudinary configured');
+    console.log(' Cloudinary configured');
 };
 const isCloudinaryConfigured = () => cloudinaryConfigured;
 exports.isCloudinaryConfigured = isCloudinaryConfigured;

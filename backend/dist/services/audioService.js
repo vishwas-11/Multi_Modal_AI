@@ -126,7 +126,7 @@ const analyzeAudioFromUrl = async (url, userPrompt, language) => {
             timeout: 60000,
         });
         await fs_1.default.promises.writeFile(tempPath, Buffer.from(response.data));
-        return (0, exports.analyzeAudioFull)(tempPath, userPrompt, language);
+        return await (0, exports.analyzeAudioFull)(tempPath, userPrompt, language);
     }
     finally {
         await (0, fileUtils_1.deleteFile)(tempPath);

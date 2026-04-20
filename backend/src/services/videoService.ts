@@ -1,4 +1,6 @@
 import ffmpeg from 'fluent-ffmpeg';
+import ffmpegStatic from 'ffmpeg-static';
+import ffprobeStatic from 'ffprobe-static';
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
@@ -30,6 +32,15 @@ export interface VideoMetadata {
 export type FrameStrategy = 'fixed_interval' | 'scene_change' | 'uniform';
 
 const MAX_FRAMES = 20;
+const FFMPEG_TIMEOUT_MS = 120000;
+
+if (ffmpegStatic) {
+  ffmpeg.setFfmpegPath(ffmpegStatic);
+}
+
+if (ffprobeStatic.path) {
+  ffmpeg.setFfprobePath(ffprobeStatic.path);
+}
 
 /**
  * Get video metadata using ffprobe
@@ -100,6 +111,7 @@ const getSceneChangeTimestamps = async (
 ): Promise<number[]> => {
   return new Promise((resolve) => {
     const timestamps: number[] = [];
+    const nullOutput = process.platform === 'win32' ? 'NUL' : '/dev/null';
 
     ffmpeg(videoPath)
       .outputOptions([
@@ -107,7 +119,7 @@ const getSceneChangeTimestamps = async (
         '-vsync', 'vfr',
         '-f', 'null',
       ])
-      .output('/dev/null')
+      .output(nullOutput)
       .on('stderr', (line: string) => {
         const match = line.match(/pts_time:([\d.]+)/);
         if (match) {
@@ -230,13 +242,27 @@ export const extractAudioFromVideo = (videoPath: string): Promise<string> => {
 
 export const downloadVideoToTemp = async (url: string): Promise<string> => {
   const tempPath = path.join(process.cwd(), 'src/uploads', `video-${uuidv4()}.mp4`);
+  let lastError: unknown;
 
-  const response = await axios.get(url, {
-    responseType: 'arraybuffer',
-  });
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const response = await axios.get(url, {
+        responseType: 'arraybuffer',
+        timeout: FFMPEG_TIMEOUT_MS,
+        maxRedirects: 5,
+      });
 
-  await fs.promises.writeFile(tempPath, Buffer.from(response.data));
-  return tempPath;
+      await fs.promises.writeFile(tempPath, Buffer.from(response.data));
+      return tempPath;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 750));
+      }
+    }
+  }
+
+  throw lastError;
 };
 
 export const processVideoForAnalysis = async (

@@ -4,6 +4,7 @@ import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import sharp from 'sharp';
 import { deleteFile, deleteFiles } from '../utils/fileUtils';
+import { getPrivateDownloadUrl } from './cloudinaryService';
 
 export interface DocumentPage {
   pageNumber: number;
@@ -55,6 +56,35 @@ export const downloadDocumentToTemp = async (url: string, mimeType: string): Pro
 
   await fs.promises.writeFile(tempPath, Buffer.from(response.data));
   return tempPath;
+};
+
+export const downloadDocumentToTempWithFallback = async (
+  url: string,
+  mimeType: string,
+  publicId?: string
+): Promise<string> => {
+  try {
+    return await downloadDocumentToTemp(url, mimeType);
+  } catch (error) {
+    if (!axios.isAxiosError(error) || error.response?.status !== 401 || !publicId) {
+      throw error;
+    }
+
+    const format = getExtFromMime(mimeType).replace('.', '') || 'bin';
+
+    try {
+      const privateDownloadUrl = getPrivateDownloadUrl(publicId, format, 'raw', 'upload');
+      return await downloadDocumentToTemp(privateDownloadUrl, mimeType);
+    } catch (fallbackError) {
+      if (!axios.isAxiosError(fallbackError) || fallbackError.response?.status !== 401) {
+        throw fallbackError;
+      }
+
+      // Some Cloudinary setups store restricted raw assets as authenticated delivery type.
+      const authDownloadUrl = getPrivateDownloadUrl(publicId, format, 'raw', 'authenticated');
+      return downloadDocumentToTemp(authDownloadUrl, mimeType);
+    }
+  }
 };
 
 const getExtFromMime = (mime: string): string => {

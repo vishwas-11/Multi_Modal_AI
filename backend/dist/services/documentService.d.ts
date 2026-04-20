@@ -27,6 +27,7 @@ export declare const getDocumentType: (mimeType: string) => DocumentMetadata["do
  * Download document from URL to temp path
  */
 export declare const downloadDocumentToTemp: (url: string, mimeType: string) => Promise<string>;
+export declare const downloadDocumentToTempWithFallback: (url: string, mimeType: string, publicId?: string) => Promise<string>;
 /**
  * For text documents: read and clean content
  */

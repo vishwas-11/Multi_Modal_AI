@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getTransformedUrl = exports.deleteFromCloudinary = exports.uploadFilePathToCloudinary = exports.uploadToCloudinary = void 0;
+exports.getPrivateDownloadUrl = exports.getSignedDeliveryUrl = exports.getTransformedUrl = exports.deleteFromCloudinary = exports.uploadFilePathToCloudinary = exports.uploadToCloudinary = void 0;
 const cloudinary_1 = require("../config/cloudinary");
 /**
  * Upload a file buffer to Cloudinary
@@ -92,4 +92,32 @@ const getTransformedUrl = (publicId, transformations) => {
     });
 };
 exports.getTransformedUrl = getTransformedUrl;
+/**
+ * Get a signed delivery URL (useful when raw assets are ACL-restricted).
+ */
+const getSignedDeliveryUrl = (publicId, resourceType = 'raw') => {
+    if (!(0, cloudinary_1.isCloudinaryConfigured)()) {
+        throw new Error('Cloudinary is not configured. Cannot generate signed delivery URLs without Cloudinary credentials.');
+    }
+    return cloudinary_1.cloudinary.url(publicId, {
+        secure: true,
+        sign_url: true,
+        resource_type: resourceType,
+        type: 'upload',
+    });
+};
+exports.getSignedDeliveryUrl = getSignedDeliveryUrl;
+/**
+ * Get a private download URL for ACL-restricted assets.
+ */
+const getPrivateDownloadUrl = (publicId, format, resourceType = 'raw', deliveryType = 'upload') => {
+    if (!(0, cloudinary_1.isCloudinaryConfigured)()) {
+        throw new Error('Cloudinary is not configured. Cannot generate private download URLs without Cloudinary credentials.');
+    }
+    return cloudinary_1.cloudinary.utils.private_download_url(publicId, format, {
+        resource_type: resourceType,
+        type: deliveryType,
+    });
+};
+exports.getPrivateDownloadUrl = getPrivateDownloadUrl;
 //# sourceMappingURL=cloudinaryService.js.map

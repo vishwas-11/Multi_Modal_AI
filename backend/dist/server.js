@@ -69,13 +69,12 @@ const startServer = async () => {
         (0, cloudinary_1.default)();
         (0, scheduler_1.startCleanupScheduler)();
         app.listen(PORT, () => {
-            console.log(`\n🚀 Server running on port ${PORT}`);
-            console.log(`📍 Environment: ${process.env.NODE_ENV}`);
-            console.log(`🔗 Health: http://localhost:${PORT}/health\n`);
+            console.log(`\n Server running on port ${PORT}`);
+            console.log(` Health: Health check passed!\n`);
         });
     }
     catch (error) {
-        console.error('❌ Failed to start server:', error);
+        console.error(' Failed to start server:', error);
         process.exit(1);
     }
 };

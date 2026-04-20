@@ -107,7 +107,7 @@ exports.analyzeDocumentMedia = (0, errorHandler_1.asyncHandler)(async (req, res)
     const media = await Media_1.default.findOne({ _id: mediaId, uploadedBy: req.user._id });
     if (!media)
         return (0, response_1.sendError)(res, 'Media not found', 404);
-    const tempPath = await (0, documentService_1.downloadDocumentToTemp)(media.url, media.mimeType);
+    const tempPath = await (0, documentService_1.downloadDocumentToTempWithFallback)(media.url, media.mimeType, media.publicId);
     try {
         let analysis;
         if (media.mimeType.startsWith('image/')) {
@@ -131,7 +131,7 @@ exports.structuredExtractMedia = (0, errorHandler_1.asyncHandler)(async (req, re
     const media = await Media_1.default.findOne({ _id: mediaId, uploadedBy: req.user._id });
     if (!media)
         return (0, response_1.sendError)(res, 'Media not found', 404);
-    const tempPath = await (0, documentService_1.downloadDocumentToTemp)(media.url, media.mimeType);
+    const tempPath = await (0, documentService_1.downloadDocumentToTempWithFallback)(media.url, media.mimeType, media.publicId);
     try {
         const page = await (0, documentService_1.processDocumentImagePage)(tempPath);
         const result = await (0, geminiService_1.extractStructuredData)([page], extractionType);
@@ -180,7 +180,7 @@ exports.analyzeMultiPageDocument = (0, errorHandler_1.asyncHandler)(async (req, 
     const media = await Media_1.default.findOne({ _id: mediaId, uploadedBy: req.user._id });
     if (!media)
         return (0, response_1.sendError)(res, 'Media not found', 404);
-    const tempPath = await (0, documentService_1.downloadDocumentToTemp)(media.url, media.mimeType);
+    const tempPath = await (0, documentService_1.downloadDocumentToTempWithFallback)(media.url, media.mimeType, media.publicId);
     try {
         const pages = await (0, documentService_1.processImageDocument)(tempPath);
         const result = await (0, geminiService_1.analyzeDocumentPages)(pages, prompt);

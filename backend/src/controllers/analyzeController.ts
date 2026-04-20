@@ -29,6 +29,7 @@ import { analyzeAudioFromUrl } from '../services/audioService';
 
 import {
   downloadDocumentToTemp,
+  downloadDocumentToTempWithFallback,
   extractTextFromDocument,
   processImageDocument,
   processDocumentImagePage,
@@ -154,7 +155,11 @@ export const analyzeDocumentMedia = asyncHandler(async (req: AuthRequest, res: R
   const media = await Media.findOne({ _id: mediaId, uploadedBy: req.user!._id });
   if (!media) return sendError(res, 'Media not found', 404);
 
-  const tempPath = await downloadDocumentToTemp(media.url, media.mimeType);
+  const tempPath = await downloadDocumentToTempWithFallback(
+    media.url,
+    media.mimeType,
+    media.publicId
+  );
 
   try {
     let analysis;
@@ -182,7 +187,11 @@ export const structuredExtractMedia = asyncHandler(async (req: AuthRequest, res:
   const media = await Media.findOne({ _id: mediaId, uploadedBy: req.user!._id });
   if (!media) return sendError(res, 'Media not found', 404);
 
-  const tempPath = await downloadDocumentToTemp(media.url, media.mimeType);
+  const tempPath = await downloadDocumentToTempWithFallback(
+    media.url,
+    media.mimeType,
+    media.publicId
+  );
 
   try {
     const page = await processDocumentImagePage(tempPath);
@@ -236,7 +245,11 @@ export const analyzeMultiPageDocument = asyncHandler(async (req: AuthRequest, re
   const media = await Media.findOne({ _id: mediaId, uploadedBy: req.user!._id });
   if (!media) return sendError(res, 'Media not found', 404);
 
-  const tempPath = await downloadDocumentToTemp(media.url, media.mimeType);
+  const tempPath = await downloadDocumentToTempWithFallback(
+    media.url,
+    media.mimeType,
+    media.publicId
+  );
   try {
     const pages = await processImageDocument(tempPath);
     const result = await analyzeDocumentPages(pages, prompt);

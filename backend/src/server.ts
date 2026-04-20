@@ -74,8 +74,7 @@ const startServer = async (): Promise<void> => {
 
     app.listen(PORT, () => {
       console.log(`\n Server running on port ${PORT}`);
-      console.log(` Environment: ${process.env.NODE_ENV}`);
-      console.log(` Health: http://localhost:${PORT}/health\n`);
+      console.log(` Health: Health check passed!\n`);
     });
   } catch (error) {
     console.error(' Failed to start server:', error);

@@ -166,7 +166,12 @@ exports.listMedia = (0, errorHandler_1.asyncHandler)(async (req, res) => {
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit);
-    (0, response_1.sendSuccess)(res, media);
+    const normalized = media.map((item) => ({
+        ...item.toObject(),
+        id: String(item._id),
+        hasAnalysis: Boolean(item.analysis),
+    }));
+    (0, response_1.sendSuccess)(res, normalized);
 });
 exports.getMediaById = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const media = await Media_1.default.findOne({ _id: req.params.id, uploadedBy: req.user._id });
@@ -174,7 +179,11 @@ exports.getMediaById = (0, errorHandler_1.asyncHandler)(async (req, res) => {
         (0, response_1.sendError)(res, 'Not found', 404);
         return;
     }
-    (0, response_1.sendSuccess)(res, media);
+    (0, response_1.sendSuccess)(res, {
+        ...media.toObject(),
+        id: String(media._id),
+        hasAnalysis: Boolean(media.analysis),
+    });
 });
 /**
  * DELETE MEDIA
@@ -192,8 +201,20 @@ exports.deleteMedia = (0, errorHandler_1.asyncHandler)(async (req, res) => {
 // helper
 const formatMediaResponse = (media) => ({
     id: media._id,
+    fileName: media.fileName,
+    originalName: media.originalName,
     url: media.url,
     type: media.type,
+    mimeType: media.mimeType,
+    size: media.size,
+    dimensions: media.dimensions,
+    duration: media.duration,
+    thumbnail: media.thumbnail,
+    posterFrame: media.posterFrame,
+    waveformData: media.waveformData,
+    videoMetadata: media.videoMetadata,
+    hasAnalysis: Boolean(media.analysis),
+    analysis: media.analysis,
     createdAt: media.createdAt,
 });
 //# sourceMappingURL=uploadController.js.map

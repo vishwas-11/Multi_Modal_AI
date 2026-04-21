@@ -15,6 +15,8 @@ const response_1 = require("../utils/response");
 const geminiService_1 = require("../services/geminiService");
 const imageService_1 = require("../services/imageService");
 const fileUtils_1 = require("../utils/fileUtils");
+const audioService_1 = require("../services/audioService");
+const videoService_1 = require("../services/videoService");
 const tokenCounter_1 = require("../utils/tokenCounter");
 const exportService_1 = require("../services/exportService");
 const mongoose_1 = __importDefault(require("mongoose"));
@@ -54,7 +56,44 @@ const prepareMediaForGemini = async (mediaIds, userId) => {
             }
             catch { }
         }
-        else if (media.analysis) {
+        else {
+            if (!media.analysis) {
+                try {
+                    if (media.type === 'audio') {
+                        const audioAnalysis = await (0, audioService_1.analyzeAudioFromUrl)(media.url);
+                        media.analysis = {
+                            summary: audioAnalysis.summary,
+                            transcription: audioAnalysis.transcription.text,
+                            sentiment: audioAnalysis.sentiment,
+                            actionItems: audioAnalysis.actionItems,
+                            keyTopics: audioAnalysis.keyTopics,
+                            speakerCount: audioAnalysis.speakerCount,
+                            speakers: audioAnalysis.speakers,
+                            decisions: audioAnalysis.decisions,
+                            language: audioAnalysis.language,
+                            analyzedAt: new Date(),
+                        };
+                        await media.save();
+                    }
+                    else if (media.type === 'video') {
+                        const { frames, metadata, tempDir, tempVideoPath, audioPath } = await (0, videoService_1.processVideoForAnalysis)(media.url);
+                        try {
+                            const videoAnalysis = await (0, geminiService_1.analyzeVideoFrames)(frames, metadata.duration);
+                            media.analysis = { ...videoAnalysis, analyzedAt: new Date() };
+                            await media.save();
+                        }
+                        finally {
+                            await (0, videoService_1.cleanupVideoTemp)(tempVideoPath, tempDir, audioPath);
+                        }
+                    }
+                }
+                catch (err) {
+                    console.warn(`Failed to auto-analyze media ${media._id}:`, err);
+                }
+            }
+            if (!media.analysis) {
+                continue;
+            }
             const lines = [`[${media.type.toUpperCase()}: ${media.originalName}]`];
             if (media.analysis.summary)
                 lines.push(`Summary: ${media.analysis.summary}`);
@@ -128,17 +167,78 @@ exports.chat = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     (0, response_1.sendSuccess)(res, { conversationId: conversation._id, message: response, role: 'assistant' });
 });
 exports.streamChat = (0, errorHandler_1.asyncHandler)(async (req, res, _next) => {
-    const { message } = req.query;
+    const { message, conversationId } = req.query;
     if (!message || typeof message !== 'string') {
         (0, response_1.sendError)(res, 'message query param is required', 400);
         return;
     }
-    const stream = await (0, geminiService_1.streamChatWithContext)([{ role: 'user', content: message }], SYSTEM_PROMPT);
+    const userId = req.user._id;
+    const mediaIdsRaw = typeof req.query.mediaIds === 'string' ? req.query.mediaIds : '';
+    const mediaIds = mediaIdsRaw
+        .split(',')
+        .map((id) => id.trim())
+        .filter((id) => id && id !== 'undefined' && mongoose_1.default.Types.ObjectId.isValid(id));
+    let conversation = typeof conversationId === 'string'
+        ? await Conversation_1.default.findOne({ _id: conversationId, userId })
+        : null;
+    if (!conversation) {
+        conversation = await Conversation_1.default.create({
+            userId,
+            title: message.substring(0, 80),
+            messages: [],
+            mediaContext: mediaIds.map((id) => new mongoose_1.default.Types.ObjectId(id)),
+        });
+    }
+    if ((0, tokenCounter_1.needsSummarization)(conversation.messages) && !conversation.contextSummary) {
+        try {
+            const summaryPrompt = (0, tokenCounter_1.buildSummaryPrompt)(conversation.messages);
+            const summary = await (0, geminiService_1.summarizeConversationContext)(summaryPrompt);
+            conversation.contextSummary = summary;
+            conversation.contextSummarizedAt = new Date();
+        }
+        catch { }
+    }
+    const history = await buildGeminiHistory(conversation._id, userId, conversation.contextSummary);
+    const { imageParts, textContext } = await prepareMediaForGemini(mediaIds, userId);
+    const fullMessage = textContext
+        ? `[Media context]\n${textContext}\n\n[User message]\n${message}`
+        : message;
+    const userMsg = {
+        role: 'user',
+        content: fullMessage,
+        imageParts: imageParts.length > 0 ? imageParts : undefined,
+    };
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+    res.write(`event: conversation\ndata: ${JSON.stringify({ conversationId: conversation._id })}\n\n`);
+    const stream = await (0, geminiService_1.streamChatWithContext)([...history, userMsg], SYSTEM_PROMPT);
     let combined = '';
     for await (const chunk of stream.stream) {
-        combined += chunk.text();
+        const text = chunk.text();
+        if (!text)
+            continue;
+        combined += text;
+        res.write(`event: chunk\ndata: ${JSON.stringify({ text })}\n\n`);
     }
-    (0, response_1.sendSuccess)(res, { message: combined });
+    conversation.messages.push({
+        role: 'user',
+        content: message,
+        mediaIds: mediaIds.map((id) => new mongoose_1.default.Types.ObjectId(id)),
+        timestamp: new Date(),
+    });
+    conversation.messages.push({
+        role: 'assistant',
+        content: combined,
+        timestamp: new Date(),
+    });
+    if (conversation.messages.length <= 2) {
+        conversation.title = message.substring(0, 80);
+    }
+    await conversation.save();
+    res.write('event: done\ndata: {}\n\n');
+    res.end();
 });
 exports.getConversations = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const conversations = await Conversation_1.default.find({ userId: req.user._id })

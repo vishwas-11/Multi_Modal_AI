@@ -12,6 +12,58 @@ export interface CloudinaryUploadResult {
   resourceType: string;
 }
 
+const DEFAULT_UPLOAD_RETRIES = parseInt(process.env.CLOUDINARY_UPLOAD_RETRIES || '3', 10);
+const BASE_RETRY_DELAY_MS = parseInt(process.env.CLOUDINARY_RETRY_BASE_DELAY_MS || '500', 10);
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+const isRetryableCloudinaryError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false;
+  const err = error as { code?: string; message?: string };
+  const code = err.code?.toUpperCase();
+  const message = err.message?.toLowerCase() || '';
+
+  if (code && ['ECONNRESET', 'ETIMEDOUT', 'ESOCKETTIMEDOUT', 'EAI_AGAIN', 'ENOTFOUND'].includes(code)) {
+    return true;
+  }
+
+  return (
+    message.includes('socket disconnected') ||
+    message.includes('tls') ||
+    message.includes('network') ||
+    message.includes('timed out')
+  );
+};
+
+const uploadWithRetry = async (
+  uploadFn: () => Promise<UploadApiResponse>,
+  fileLabel: string
+): Promise<UploadApiResponse> => {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= DEFAULT_UPLOAD_RETRIES; attempt += 1) {
+    try {
+      return await uploadFn();
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableCloudinaryError(error) || attempt === DEFAULT_UPLOAD_RETRIES) {
+        throw error;
+      }
+
+      const delayMs = BASE_RETRY_DELAY_MS * 2 ** (attempt - 1);
+      console.warn(
+        `Cloudinary upload retry ${attempt}/${DEFAULT_UPLOAD_RETRIES} for ${fileLabel} after ${delayMs}ms`
+      );
+      await sleep(delayMs);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Cloudinary upload failed after retries');
+};
+
 /**
  * Upload a file buffer to Cloudinary
  */
@@ -32,17 +84,29 @@ export const uploadToCloudinary = (
       ...options,
     };
 
-    const uploadStream = cloudinary.uploader.upload_stream(
-      uploadOptions,
-      (error, result: UploadApiResponse | undefined) => {
-        if (error) {
-          reject(new Error(`Cloudinary upload failed: ${error.message}`));
-          return;
-        }
-        if (!result) {
-          reject(new Error('Cloudinary upload returned no result'));
-          return;
-        }
+    uploadWithRetry(
+      () =>
+        new Promise<UploadApiResponse>((retryResolve, retryReject) => {
+          const uploadStream = cloudinary.uploader.upload_stream(
+            uploadOptions,
+            (error, result: UploadApiResponse | undefined) => {
+              if (error) {
+                retryReject(error);
+                return;
+              }
+              if (!result) {
+                retryReject(new Error('Cloudinary upload returned no result'));
+                return;
+              }
+              retryResolve(result);
+            }
+          );
+
+          uploadStream.end(fileBuffer);
+        }),
+      'buffer upload'
+    )
+      .then((result) =>
         resolve({
           url: result.secure_url,
           publicId: result.public_id,
@@ -52,11 +116,9 @@ export const uploadToCloudinary = (
           height: result.height,
           duration: result.duration,
           resourceType: result.resource_type,
-        });
-      }
-    );
-
-    uploadStream.end(fileBuffer);
+        })
+      )
+      .catch((error) => reject(new Error(`Cloudinary upload failed: ${(error as Error).message}`)));
   });
 };
 
@@ -73,11 +135,15 @@ export const uploadFilePathToCloudinary = async (
     );
   }
 
-  const result = await cloudinary.uploader.upload(filePath, {
-    folder: 'multimodal-ai',
-    resource_type: 'auto',
-    ...options,
-  });
+  const result = await uploadWithRetry(
+    () =>
+      cloudinary.uploader.upload(filePath, {
+        folder: 'multimodal-ai',
+        resource_type: 'auto',
+        ...options,
+      }),
+    filePath
+  );
 
   return {
     url: result.secure_url,

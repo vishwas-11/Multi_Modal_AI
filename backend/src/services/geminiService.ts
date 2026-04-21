@@ -289,8 +289,19 @@ export const chatWithContext = async (
   const chat = model.startChat({ history });
 
   const last = messages[messages.length - 1];
+  const lastParts: Part[] = [{ text: last.content }];
+  if (last.imageParts?.length) {
+    for (const image of last.imageParts) {
+      lastParts.push({
+        inlineData: {
+          data: image.base64,
+          mimeType: image.mimeType,
+        },
+      });
+    }
+  }
 
-  const result = await chat.sendMessage(last.content);
+  const result = await chat.sendMessage(lastParts);
   return result.response.text();
 };
 
@@ -313,7 +324,19 @@ export const streamChatWithContext = async (
 
   const chat = model.startChat({ history });
   const last = messages[messages.length - 1];
-  return chat.sendMessageStream(last.content);
+  const lastParts: Part[] = [{ text: last.content }];
+  if (last.imageParts?.length) {
+    for (const image of last.imageParts) {
+      lastParts.push({
+        inlineData: {
+          data: image.base64,
+          mimeType: image.mimeType,
+        },
+      });
+    }
+  }
+
+  return chat.sendMessageStream(lastParts);
 };
 
 export const summarizeConversationContext = async (context: string): Promise<string> => {

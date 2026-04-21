@@ -200,7 +200,13 @@ export const listMedia = asyncHandler(async (req: AuthRequest, res: Response) =>
     .skip((page - 1) * limit)
     .limit(limit);
 
-  sendSuccess(res, media);
+  const normalized = media.map((item: any) => ({
+    ...item.toObject(),
+    id: String(item._id),
+    hasAnalysis: Boolean(item.analysis),
+  }));
+
+  sendSuccess(res, normalized);
 });
 
 export const getMediaById = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -209,7 +215,11 @@ export const getMediaById = asyncHandler(async (req: AuthRequest, res: Response)
     sendError(res, 'Not found', 404);
     return;
   }
-  sendSuccess(res, media);
+  sendSuccess(res, {
+    ...media.toObject(),
+    id: String(media._id),
+    hasAnalysis: Boolean(media.analysis),
+  });
 });
 
 /**
@@ -232,7 +242,19 @@ export const deleteMedia = asyncHandler(async (req: AuthRequest, res: Response) 
 // helper
 const formatMediaResponse = (media: any) => ({
   id: media._id,
+  fileName: media.fileName,
+  originalName: media.originalName,
   url: media.url,
   type: media.type,
+  mimeType: media.mimeType,
+  size: media.size,
+  dimensions: media.dimensions,
+  duration: media.duration,
+  thumbnail: media.thumbnail,
+  posterFrame: media.posterFrame,
+  waveformData: media.waveformData,
+  videoMetadata: media.videoMetadata,
+  hasAnalysis: Boolean(media.analysis),
+  analysis: media.analysis,
   createdAt: media.createdAt,
 });

@@ -34,7 +34,7 @@ const getVisionModel = () => {
 const getTextModel = () => {
     if (!textModel) {
         textModel = getClient().getGenerativeModel({
-            model: 'gemini-1.5-pro',
+            model: 'gemini-2.5-flash',
             generationConfig: {
                 temperature: 0.7,
                 maxOutputTokens: 8192,
@@ -212,7 +212,18 @@ const chatWithContext = async (messages, systemPrompt) => {
     }
     const chat = model.startChat({ history });
     const last = messages[messages.length - 1];
-    const result = await chat.sendMessage(last.content);
+    const lastParts = [{ text: last.content }];
+    if (last.imageParts?.length) {
+        for (const image of last.imageParts) {
+            lastParts.push({
+                inlineData: {
+                    data: image.base64,
+                    mimeType: image.mimeType,
+                },
+            });
+        }
+    }
+    const result = await chat.sendMessage(lastParts);
     return result.response.text();
 };
 exports.chatWithContext = chatWithContext;
@@ -230,7 +241,18 @@ const streamChatWithContext = async (messages, systemPrompt) => {
     }
     const chat = model.startChat({ history });
     const last = messages[messages.length - 1];
-    return chat.sendMessageStream(last.content);
+    const lastParts = [{ text: last.content }];
+    if (last.imageParts?.length) {
+        for (const image of last.imageParts) {
+            lastParts.push({
+                inlineData: {
+                    data: image.base64,
+                    mimeType: image.mimeType,
+                },
+            });
+        }
+    }
+    return chat.sendMessageStream(lastParts);
 };
 exports.streamChatWithContext = streamChatWithContext;
 const summarizeConversationContext = async (context) => {

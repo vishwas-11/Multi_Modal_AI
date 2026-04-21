@@ -18,15 +18,21 @@ export const getSessionGallery = asyncHandler(
       createdAt: { $gte: since },
     })
       .sort({ createdAt: -1 })
-      .select('originalName url type mimeType size thumbnail posterFrame waveformData duration dimensions hasAnalysis createdAt')
+      .select('originalName url type mimeType size thumbnail posterFrame waveformData duration dimensions analysis createdAt')
       .lean();
 
     // Group by type
+    const normalized = media.map((m: any) => ({
+      ...m,
+      id: String(m._id),
+      hasAnalysis: Boolean(m.analysis),
+    }));
+
     const grouped = {
-      images: media.filter((m) => m.type === 'image'),
-      videos: media.filter((m) => m.type === 'video'),
-      audio:  media.filter((m) => m.type === 'audio'),
-      documents: media.filter((m) => m.type === 'document'),
+      images: normalized.filter((m) => m.type === 'image'),
+      videos: normalized.filter((m) => m.type === 'video'),
+      audio:  normalized.filter((m) => m.type === 'audio'),
+      documents: normalized.filter((m) => m.type === 'document'),
       total: media.length,
     };
 

@@ -31,6 +31,11 @@ export const authenticate = async (
       token = req.cookies.token;
     }
 
+    // EventSource/download requests often pass JWT via query string
+    if (!token && typeof req.query.token === 'string') {
+      token = req.query.token;
+    }
+
     if (!token) {
       res.status(401).json({
         success: false,

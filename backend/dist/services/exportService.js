@@ -1,6 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildExportFilename = exports.exportConversationAsHTML = exports.exportConversationAsMarkdown = void 0;
+const escapeHtml = (value) => value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 /**
  * Export conversation as Markdown string
  */
@@ -43,6 +49,7 @@ exports.exportConversationAsMarkdown = exportConversationAsMarkdown;
  */
 const exportConversationAsHTML = (conversation, mediaMap) => {
     const date = new Date(conversation.createdAt).toLocaleString();
+    const safeTitle = escapeHtml(conversation.title);
     const messageHTML = conversation.messages
         .map((msg) => {
         const isUser = msg.role === 'user';
@@ -55,16 +62,12 @@ const exportConversationAsHTML = (conversation, mediaMap) => {
                 const media = mediaMap.get(id.toString());
                 if (!media)
                     return '';
-                return `<div class="attachment">📎 ${media.originalName} (${media.type})</div>`;
+                return `<div class="attachment">📎 ${escapeHtml(media.originalName)} (${escapeHtml(media.type)})</div>`;
             })
                 .join('')
             : '';
         // Escape HTML in content, then convert newlines to <br>
-        const safeContent = msg.content
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/\n/g, '<br>');
+        const safeContent = escapeHtml(msg.content).replace(/\n/g, '<br>');
         return `
         <div style="background:${bgColor};padding:16px;margin:8px 0;border-radius:8px;">
           <div style="font-weight:bold;margin-bottom:8px;">${label} <span style="font-weight:normal;color:#888;font-size:12px;">${time}</span></div>
@@ -77,7 +80,7 @@ const exportConversationAsHTML = (conversation, mediaMap) => {
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>${conversation.title}</title>
+  <title>${safeTitle}</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #333; }
     h1 { border-bottom: 2px solid #eee; padding-bottom: 12px; }
@@ -86,7 +89,7 @@ const exportConversationAsHTML = (conversation, mediaMap) => {
   </style>
 </head>
 <body>
-  <h1>${conversation.title}</h1>
+  <h1>${safeTitle}</h1>
   <div class="meta">Date: ${date} · Messages: ${conversation.messages.length}</div>
   ${messageHTML}
 </body>

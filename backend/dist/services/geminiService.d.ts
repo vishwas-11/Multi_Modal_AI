@@ -27,8 +27,8 @@ export declare const performOCR: (imagePath: string) => Promise<{
     summary: string;
     extractedText: string;
 }>;
-export declare const analyzeVideoFrames: (frames: VideoFrame[], duration: number) => Promise<AnalysisResult>;
-export declare const analyzeDocument: (text: string) => Promise<AnalysisResult>;
+export declare const analyzeVideoFrames: (frames: VideoFrame[], duration: number, prompt?: string) => Promise<AnalysisResult>;
+export declare const analyzeDocument: (text: string, prompt?: string) => Promise<AnalysisResult>;
 export declare const analyzeDocumentPages: (pages: DocumentPage[], question?: string) => Promise<AnalysisResult>;
 export declare const extractStructuredData: (pages: DocumentPage[], extractionType?: string) => Promise<AnalysisResult>;
 export declare const analyzeChart: (imagePath: string) => Promise<AnalysisResult>;

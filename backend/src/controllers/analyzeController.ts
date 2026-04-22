@@ -114,7 +114,7 @@ export const ocrImageMedia = asyncHandler(async (req: AuthRequest, res: Response
 // ─────────────────────────────────────────
 
 export const analyzeVideoMedia = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { mediaId } = req.body;
+  const { mediaId, prompt } = req.body;
 
   const media = await Media.findOne({ _id: mediaId, uploadedBy: req.user!._id });
   if (!media) return sendError(res, 'Media not found', 404);
@@ -124,7 +124,7 @@ export const analyzeVideoMedia = asyncHandler(async (req: AuthRequest, res: Resp
     await processVideoForAnalysis(media.url);
 
   try {
-    const analysis = await analyzeVideoFrames(frames, metadata.duration);
+    const analysis = await analyzeVideoFrames(frames, metadata.duration, prompt);
 
     media.analysis = { ...analysis, analyzedAt: new Date() };
     await media.save();
@@ -140,13 +140,13 @@ export const analyzeVideoMedia = asyncHandler(async (req: AuthRequest, res: Resp
 // ─────────────────────────────────────────
 
 export const analyzeAudioMedia = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { mediaId } = req.body;
+  const { mediaId, prompt } = req.body;
 
   const media = await Media.findOne({ _id: mediaId, uploadedBy: req.user!._id });
   if (!media) return sendError(res, 'Media not found', 404);
   if (!ensureMediaType(res, media.type, ['audio'])) return;
 
-  const audioAnalysis = await analyzeAudioFromUrl(media.url);
+  const audioAnalysis = await analyzeAudioFromUrl(media.url, prompt);
 
   media.analysis = {
     summary: audioAnalysis.summary,
@@ -165,7 +165,7 @@ export const analyzeAudioMedia = asyncHandler(async (req: AuthRequest, res: Resp
 // ─────────────────────────────────────────
 
 export const analyzeDocumentMedia = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { mediaId } = req.body;
+  const { mediaId, prompt } = req.body;
 
   const media = await Media.findOne({ _id: mediaId, uploadedBy: req.user!._id });
   if (!media) return sendError(res, 'Media not found', 404);
@@ -182,10 +182,10 @@ export const analyzeDocumentMedia = asyncHandler(async (req: AuthRequest, res: R
 
     if (media.mimeType.startsWith('image/')) {
       const pages = await processImageDocument(tempPath);
-      analysis = await analyzeDocumentPages(pages, 'Analyze document');
+      analysis = await analyzeDocumentPages(pages, (prompt && prompt.trim()) ? prompt.trim() : 'Analyze document');
     } else {
       const text = await extractTextFromDocument(tempPath, media.mimeType);
-      analysis = await analyzeDocument(text);
+      analysis = await analyzeDocument(text, prompt);
     }
 
     media.analysis = { ...analysis, analyzedAt: new Date() };

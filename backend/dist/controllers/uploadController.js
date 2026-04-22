@@ -189,18 +189,19 @@ exports.getMediaById = (0, errorHandler_1.asyncHandler)(async (req, res) => {
  * DELETE MEDIA
  */
 exports.deleteMedia = (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const media = await Media_1.default.findById(req.params.id);
+    const media = await Media_1.default.findOne({ _id: req.params.id, uploadedBy: req.user._id });
     if (!media) {
         (0, response_1.sendError)(res, 'Not found', 404);
         return;
     }
-    await (0, cloudinaryService_1.deleteFromCloudinary)(media.publicId, 'image');
+    const resourceType = media.type === 'image' ? 'image' : media.type === 'video' ? 'video' : media.type === 'audio' ? 'video' : 'raw';
+    await (0, cloudinaryService_1.deleteFromCloudinary)(media.publicId, resourceType);
     await media.deleteOne();
     (0, response_1.sendSuccess)(res, {}, 'Deleted');
 });
 // helper
 const formatMediaResponse = (media) => ({
-    id: media._id,
+    id: String(media._id),
     fileName: media.fileName,
     originalName: media.originalName,
     url: media.url,

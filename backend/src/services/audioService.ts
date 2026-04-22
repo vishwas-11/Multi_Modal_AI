@@ -156,11 +156,16 @@ export const analyzeAudioFull = async (
 
   const client = getGroqClient();
 
+  const instruction =
+    userPrompt && userPrompt.trim()
+      ? userPrompt.trim()
+      : 'Analyze this transcript';
+
   const response = await client.chat.completions.create({
     model: 'llama-3.3-70b-versatile',
     messages: [{
       role: 'user',
-      content: `Analyze this transcript:\n${transcription.formattedWithTimestamps}`
+      content: `${instruction}:\n${transcription.formattedWithTimestamps}`,
     }],
   });
 

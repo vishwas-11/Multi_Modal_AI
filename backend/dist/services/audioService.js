@@ -100,11 +100,14 @@ const analyzeAudioFull = async (audioPath, userPrompt, language, enableDiarizati
         transcription = await (0, exports.applySpeakerDiarization)(transcription);
     }
     const client = getGroqClient();
+    const instruction = userPrompt && userPrompt.trim()
+        ? userPrompt.trim()
+        : 'Analyze this transcript';
     const response = await client.chat.completions.create({
         model: 'llama-3.3-70b-versatile',
         messages: [{
                 role: 'user',
-                content: `Analyze this transcript:\n${transcription.formattedWithTimestamps}`
+                content: `${instruction}:\n${transcription.formattedWithTimestamps}`,
             }],
     });
     return {

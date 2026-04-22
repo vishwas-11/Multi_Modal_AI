@@ -10,6 +10,42 @@ const documentService_1 = require("./documentService");
 let client;
 let visionModel;
 let textModel;
+const sleep = (ms) => new Promise((resolve) => {
+    setTimeout(resolve, ms);
+});
+const isRetryableGeminiError = (err) => {
+    const msg = typeof err === 'object' && err !== null && 'message' in err
+        ? String(err.message || '')
+        : String(err || '');
+    const lowered = msg.toLowerCase();
+    return (lowered.includes('service unavailable') ||
+        lowered.includes('overloaded') ||
+        lowered.includes('resource_exhausted') ||
+        lowered.includes('rate limit') ||
+        lowered.includes('[503') ||
+        lowered.includes(' 503') ||
+        lowered.includes('[429') ||
+        lowered.includes(' 429') ||
+        lowered.includes('deadline') ||
+        lowered.includes('timeout'));
+};
+const withRetry = async (fn, label, maxAttempts = 3) => {
+    let lastErr;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+            return await fn();
+        }
+        catch (err) {
+            lastErr = err;
+            if (!isRetryableGeminiError(err) || attempt === maxAttempts)
+                break;
+            const delay = 500 * 2 ** (attempt - 1);
+            console.warn(`Gemini transient error (${label}) retry ${attempt}/${maxAttempts} after ${delay}ms`);
+            await sleep(delay);
+        }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+};
 const getClient = () => {
     if (!client) {
         if (!process.env.GEMINI_API_KEY) {
@@ -94,11 +130,14 @@ exports.performOCR = performOCR;
 // ─────────────────────────────────────────
 // VIDEO ANALYSIS
 // ─────────────────────────────────────────
-const analyzeVideoFrames = async (frames, duration) => {
+const analyzeVideoFrames = async (frames, duration, prompt) => {
     const model = getVisionModel();
     const parts = [
         { text: `Video duration: ${duration}s. Frames follow.` },
     ];
+    if (prompt && prompt.trim()) {
+        parts.push({ text: prompt.trim() });
+    }
     for (const frame of frames) {
         if (!frame.processed)
             continue;
@@ -117,10 +156,11 @@ exports.analyzeVideoFrames = analyzeVideoFrames;
 // ─────────────────────────────────────────
 // DOCUMENT ANALYSIS
 // ─────────────────────────────────────────
-const analyzeDocument = async (text) => {
+const analyzeDocument = async (text, prompt) => {
     const model = getTextModel();
+    const instruction = (prompt && prompt.trim()) ? prompt.trim() : 'Analyze this document';
     const result = await model.generateContent(`
-Analyze this document:
+${instruction}:
 
 ${text.substring(0, 50000)}
 
@@ -223,7 +263,7 @@ const chatWithContext = async (messages, systemPrompt) => {
             });
         }
     }
-    const result = await chat.sendMessage(lastParts);
+    const result = await withRetry(() => chat.sendMessage(lastParts), 'chat.sendMessage');
     return result.response.text();
 };
 exports.chatWithContext = chatWithContext;
@@ -252,7 +292,8 @@ const streamChatWithContext = async (messages, systemPrompt) => {
             });
         }
     }
-    return chat.sendMessageStream(lastParts);
+    // Retry only stream initialization (not mid-stream chunks).
+    return withRetry(() => chat.sendMessageStream(lastParts), 'chat.sendMessageStream');
 };
 exports.streamChatWithContext = streamChatWithContext;
 const summarizeConversationContext = async (context) => {

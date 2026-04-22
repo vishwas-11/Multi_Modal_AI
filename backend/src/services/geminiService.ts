@@ -182,13 +182,18 @@ export const performOCR = async (imagePath: string) => {
 
 export const analyzeVideoFrames = async (
   frames: VideoFrame[],
-  duration: number
+  duration: number,
+  prompt?: string
 ): Promise<AnalysisResult> => {
   const model = getVisionModel();
 
   const parts: Part[] = [
     { text: `Video duration: ${duration}s. Frames follow.` },
   ];
+
+  if (prompt && prompt.trim()) {
+    parts.push({ text: prompt.trim() });
+  }
 
   for (const frame of frames) {
     if (!frame.processed) continue;
@@ -210,11 +215,13 @@ export const analyzeVideoFrames = async (
 // DOCUMENT ANALYSIS
 // ─────────────────────────────────────────
 
-export const analyzeDocument = async (text: string) => {
+export const analyzeDocument = async (text: string, prompt?: string) => {
   const model = getTextModel();
 
+  const instruction = (prompt && prompt.trim()) ? prompt.trim() : 'Analyze this document';
+
   const result = await model.generateContent(`
-Analyze this document:
+${instruction}:
 
 ${text.substring(0, 50000)}
 

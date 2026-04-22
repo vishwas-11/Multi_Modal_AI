@@ -3,24 +3,27 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateToken = exports.authenticate = void 0;
+exports.generateToken = exports.authenticateWithQueryToken = exports.authenticate = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const User_1 = __importDefault(require("../models/User"));
-const authenticate = async (req, res, next) => {
+const resolveToken = (req, allowQueryToken) => {
+    // Check Authorization header
+    if (req.headers.authorization?.startsWith('Bearer ')) {
+        return req.headers.authorization.split(' ')[1];
+    }
+    // Check cookie as fallback
+    if (req.cookies?.token) {
+        return req.cookies.token;
+    }
+    // Allow query token only for explicitly scoped routes (e.g. SSE/download)
+    if (allowQueryToken && typeof req.query.token === 'string') {
+        return req.query.token;
+    }
+    return undefined;
+};
+const authenticateRequest = (allowQueryToken = false) => async (req, res, next) => {
     try {
-        let token;
-        // Check Authorization header
-        if (req.headers.authorization?.startsWith('Bearer ')) {
-            token = req.headers.authorization.split(' ')[1];
-        }
-        // Check cookie as fallback
-        if (!token && req.cookies?.token) {
-            token = req.cookies.token;
-        }
-        // EventSource/download requests often pass JWT via query string
-        if (!token && typeof req.query.token === 'string') {
-            token = req.query.token;
-        }
+        const token = resolveToken(req, allowQueryToken);
         if (!token) {
             res.status(401).json({
                 success: false,
@@ -64,7 +67,8 @@ const authenticate = async (req, res, next) => {
         next(error);
     }
 };
-exports.authenticate = authenticate;
+exports.authenticate = authenticateRequest(false);
+exports.authenticateWithQueryToken = authenticateRequest(true);
 // Generate JWT
 const generateToken = (userId, email) => {
     const jwtSecret = process.env.JWT_SECRET;

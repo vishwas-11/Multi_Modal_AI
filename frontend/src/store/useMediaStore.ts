@@ -3,6 +3,15 @@ import { create } from 'zustand';
 import { uploadApi } from '@/lib/api';
 import type { Media, SessionGallery, UploadProgress } from '@/types';
 
+const normalizeMedia = (media: Media): Media => {
+  const mediaWithOptionalId = media as Media & { _id?: unknown };
+  const resolvedId = mediaWithOptionalId.id ?? mediaWithOptionalId._id;
+  return {
+    ...media,
+    id: String(resolvedId),
+  };
+};
+
 interface MediaState {
   gallery: SessionGallery | null;
   selectedMediaIds: string[];
@@ -22,7 +31,7 @@ interface MediaState {
   setError: (error: string | null) => void;
 }
 
-export const useMediaStore = create<MediaState>((set, get) => ({
+export const useMediaStore = create<MediaState>((set) => ({
   gallery: null,
   selectedMediaIds: [],
   uploadQueue: [],
@@ -41,29 +50,31 @@ export const useMediaStore = create<MediaState>((set, get) => ({
   },
 
   addToGallery: (media) => {
+    const normalizedMedia = normalizeMedia(media);
     set((state) => {
       if (!state.gallery) {
         const empty: SessionGallery = { images: [], videos: [], audio: [], documents: [], total: 0 };
         const updated = { ...empty };
-        const key = media.type === 'image' ? 'images' : media.type === 'video' ? 'videos' : media.type === 'audio' ? 'audio' : 'documents';
-        updated[key] = [media, ...updated[key]];
+        const key = normalizedMedia.type === 'image' ? 'images' : normalizedMedia.type === 'video' ? 'videos' : normalizedMedia.type === 'audio' ? 'audio' : 'documents';
+        updated[key] = [normalizedMedia, ...updated[key]];
         updated.total = 1;
         return { gallery: updated };
       }
       const g = { ...state.gallery };
-      const key = media.type === 'image' ? 'images' : media.type === 'video' ? 'videos' : media.type === 'audio' ? 'audio' : 'documents';
-      g[key] = [media, ...g[key]];
+      const key = normalizedMedia.type === 'image' ? 'images' : normalizedMedia.type === 'video' ? 'videos' : normalizedMedia.type === 'audio' ? 'audio' : 'documents';
+      g[key] = [normalizedMedia, ...g[key]];
       g.total = g.total + 1;
       return { gallery: g };
     });
   },
 
   updateMediaInGallery: (media) => {
+    const normalizedMedia = normalizeMedia(media);
     set((state) => {
       if (!state.gallery) return state;
 
       const updateList = (list: Media[]) =>
-        list.map((item) => (item.id === media.id ? { ...item, ...media } : item));
+        list.map((item) => (item.id === normalizedMedia.id ? { ...item, ...normalizedMedia } : item));
 
       return {
         gallery: {

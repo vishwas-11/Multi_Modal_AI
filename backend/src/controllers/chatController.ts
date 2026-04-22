@@ -20,6 +20,10 @@ import { deleteFile } from '../utils/fileUtils';
 import { analyzeAudioFromUrl } from '../services/audioService';
 import { processVideoForAnalysis, cleanupVideoTemp } from '../services/videoService';
 import {
+  downloadDocumentToTempWithFallback,
+  extractTextFromDocument,
+} from '../services/documentService';
+import {
   trimConversationContext,
   needsSummarization,
   buildSummaryPrompt,
@@ -45,11 +49,29 @@ Guidelines:
 - Use timestamps when discussing video/audio content
 - Reference page numbers when discussing documents
 - If you're unsure about something in an image, say so clearly
-- Format responses with markdown for better readability`;
+- Format responses with markdown for better readability
+- Use ONLY the provided media context for factual claims
+- If information is not present in the provided context, clearly say "I can't find that in the provided media." and ask for a clearer page/section`;
 
 const MAX_HISTORY = 20;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+const getProviderErrorMessage = (err: unknown): string => {
+  if (
+    typeof err === 'object' &&
+    err !== null &&
+    'message' in err &&
+    typeof (err as { message?: unknown }).message === 'string'
+  ) {
+    const rawMessage = (err as { message: string }).message;
+    if (rawMessage.includes('[503') || rawMessage.toLowerCase().includes('service unavailable')) {
+      return 'AI service is temporarily busy. Please retry in a few seconds.';
+    }
+    return rawMessage;
+  }
+
+  return 'AI service request failed. Please try again.';
+};
 
 const prepareMediaForGemini = async (
   mediaIds: string[],
@@ -100,6 +122,24 @@ const prepareMediaForGemini = async (
             } finally {
               await cleanupVideoTemp(tempVideoPath, tempDir, audioPath);
             }
+          } else if (media.type === 'document') {
+            const tempPath = await downloadDocumentToTempWithFallback(
+              media.url,
+              media.mimeType,
+              media.publicId
+            );
+            try {
+              const extractedText = await extractTextFromDocument(tempPath, media.mimeType);
+              media.analysis = {
+                ...(media.analysis || { analyzedAt: new Date() }),
+                extractedText,
+                summary: extractedText.substring(0, 500),
+                analyzedAt: new Date(),
+              };
+              await media.save();
+            } finally {
+              await deleteFile(tempPath);
+            }
           }
         } catch (err) {
           console.warn(`Failed to auto-analyze media ${media._id}:`, err);
@@ -112,8 +152,8 @@ const prepareMediaForGemini = async (
 
       const lines = [`[${media.type.toUpperCase()}: ${media.originalName}]`];
       if (media.analysis.summary) lines.push(`Summary: ${media.analysis.summary}`);
-      if (media.analysis.transcription) lines.push(`Transcription: ${media.analysis.transcription.substring(0, 2000)}`);
-      if (media.analysis.extractedText) lines.push(`Text: ${media.analysis.extractedText.substring(0, 2000)}`);
+      if (media.analysis.transcription) lines.push(`Transcription: ${media.analysis.transcription.substring(0, 4000)}`);
+      if (media.analysis.extractedText) lines.push(`Text: ${media.analysis.extractedText.substring(0, 12000)}`);
       if (media.analysis.actionItems?.length) lines.push(`Action items: ${media.analysis.actionItems.join(', ')}`);
       textParts.push(lines.join('\n'));
     }
@@ -204,90 +244,102 @@ export const chat = asyncHandler(
 
 export const streamChat = asyncHandler(
   async (req: AuthRequest, res: Response, _next: NextFunction): Promise<void> => {
-    const { message, conversationId } = req.query;
-    if (!message || typeof message !== 'string') {
-      sendError(res, 'message query param is required', 400);
-      return;
-    }
+    try {
+      const { message, conversationId } = req.query;
+      if (!message || typeof message !== 'string') {
+        sendError(res, 'message query param is required', 400);
+        return;
+      }
 
-    const userId = req.user!._id;
-    const mediaIdsRaw = typeof req.query.mediaIds === 'string' ? req.query.mediaIds : '';
-    const mediaIds = mediaIdsRaw
-      .split(',')
-      .map((id) => id.trim())
-      .filter((id) => id && id !== 'undefined' && mongoose.Types.ObjectId.isValid(id));
+      const userId = req.user!._id;
+      const mediaIdsRaw = typeof req.query.mediaIds === 'string' ? req.query.mediaIds : '';
+      const mediaIds = mediaIdsRaw
+        .split(',')
+        .map((id) => id.trim())
+        .filter((id) => id && id !== 'undefined' && mongoose.Types.ObjectId.isValid(id));
 
-    let conversation =
-      typeof conversationId === 'string'
-        ? await Conversation.findOne({ _id: conversationId, userId })
-        : null;
+      let conversation =
+        typeof conversationId === 'string'
+          ? await Conversation.findOne({ _id: conversationId, userId })
+          : null;
 
-    if (!conversation) {
-      conversation = await Conversation.create({
-        userId,
-        title: message.substring(0, 80),
-        messages: [],
-        mediaContext: mediaIds.map((id) => new mongoose.Types.ObjectId(id)),
+      if (!conversation) {
+        conversation = await Conversation.create({
+          userId,
+          title: message.substring(0, 80),
+          messages: [],
+          mediaContext: mediaIds.map((id) => new mongoose.Types.ObjectId(id)),
+        });
+      }
+
+      if (needsSummarization(conversation.messages) && !conversation.contextSummary) {
+        try {
+          const summaryPrompt = buildSummaryPrompt(conversation.messages);
+          const summary = await summarizeConversationContext(summaryPrompt);
+          conversation.contextSummary = summary;
+          conversation.contextSummarizedAt = new Date();
+        } catch {}
+      }
+
+      const history = await buildGeminiHistory(conversation._id, userId, conversation.contextSummary);
+      const { imageParts, textContext } = await prepareMediaForGemini(mediaIds, userId);
+      const fullMessage = textContext
+        ? `[Media context]\n${textContext}\n\n[User message]\n${message}`
+        : message;
+
+      const userMsg: GeminiMessage = {
+        role: 'user',
+        content: fullMessage,
+        imageParts: imageParts.length > 0 ? imageParts : undefined,
+      };
+
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders?.();
+
+      res.write(`event: conversation\ndata: ${JSON.stringify({ conversationId: conversation._id })}\n\n`);
+
+      const stream = await streamChatWithContext([...history, userMsg], SYSTEM_PROMPT);
+      let combined = '';
+
+      for await (const chunk of stream.stream) {
+        const text = chunk.text();
+        if (!text) continue;
+        combined += text;
+        res.write(`event: chunk\ndata: ${JSON.stringify({ text })}\n\n`);
+      }
+
+      conversation.messages.push({
+        role: 'user',
+        content: message,
+        mediaIds: mediaIds.map((id) => new mongoose.Types.ObjectId(id)),
+        timestamp: new Date(),
       });
+      conversation.messages.push({
+        role: 'assistant',
+        content: combined,
+        timestamp: new Date(),
+      });
+
+      if (conversation.messages.length <= 2) {
+        conversation.title = message.substring(0, 80);
+      }
+
+      await conversation.save();
+      res.write('event: done\ndata: {}\n\n');
+      res.end();
+    } catch (err) {
+      const message = getProviderErrorMessage(err);
+
+      if (res.headersSent) {
+        res.write(`event: error\ndata: ${JSON.stringify({ message })}\n\n`);
+        res.end();
+        return;
+      }
+
+      sendError(res, message, 503);
     }
-
-    if (needsSummarization(conversation.messages) && !conversation.contextSummary) {
-      try {
-        const summaryPrompt = buildSummaryPrompt(conversation.messages);
-        const summary = await summarizeConversationContext(summaryPrompt);
-        conversation.contextSummary = summary;
-        conversation.contextSummarizedAt = new Date();
-      } catch {}
-    }
-
-    const history = await buildGeminiHistory(conversation._id, userId, conversation.contextSummary);
-    const { imageParts, textContext } = await prepareMediaForGemini(mediaIds, userId);
-    const fullMessage = textContext
-      ? `[Media context]\n${textContext}\n\n[User message]\n${message}`
-      : message;
-
-    const userMsg: GeminiMessage = {
-      role: 'user',
-      content: fullMessage,
-      imageParts: imageParts.length > 0 ? imageParts : undefined,
-    };
-
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache, no-transform');
-    res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders?.();
-
-    res.write(`event: conversation\ndata: ${JSON.stringify({ conversationId: conversation._id })}\n\n`);
-
-    const stream = await streamChatWithContext([...history, userMsg], SYSTEM_PROMPT);
-    let combined = '';
-
-    for await (const chunk of stream.stream) {
-      const text = chunk.text();
-      if (!text) continue;
-      combined += text;
-      res.write(`event: chunk\ndata: ${JSON.stringify({ text })}\n\n`);
-    }
-
-    conversation.messages.push({
-      role: 'user',
-      content: message,
-      mediaIds: mediaIds.map((id) => new mongoose.Types.ObjectId(id)),
-      timestamp: new Date(),
-    });
-    conversation.messages.push({
-      role: 'assistant',
-      content: combined,
-      timestamp: new Date(),
-    });
-
-    if (conversation.messages.length <= 2) {
-      conversation.title = message.substring(0, 80);
-    }
-
-    await conversation.save();
-    res.write('event: done\ndata: {}\n\n');
-    res.end();
   }
 );
 

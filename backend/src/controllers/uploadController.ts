@@ -241,7 +241,7 @@ export const deleteMedia = asyncHandler(async (req: AuthRequest, res: Response) 
 
 // helper
 const formatMediaResponse = (media: any) => ({
-  id: media._id,
+  id: String(media._id),
   fileName: media.fileName,
   originalName: media.originalName,
   url: media.url,

@@ -7,6 +7,7 @@ import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { processImageForAI, ProcessedImage } from './imageService';
 import { deleteFiles, deleteFile } from '../utils/fileUtils';
+import type { FfprobeData, FfprobeStream } from 'fluent-ffmpeg';
 
 export interface VideoFrame {
   timestamp: number;
@@ -47,11 +48,18 @@ if (ffprobeStatic.path) {
  */
 export const getVideoMetadata = (videoPath: string): Promise<VideoMetadata> => {
   return new Promise((resolve, reject) => {
-    ffmpeg.ffprobe(videoPath, (err, metadata) => {
-      if (err) return reject(new Error(`FFprobe failed: ${err.message}`));
+    ffmpeg.ffprobe(videoPath, (err: unknown, metadata: FfprobeData) => {
+      if (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return reject(new Error(`FFprobe failed: ${message}`));
+      }
 
-      const videoStream = metadata.streams.find((s) => s.codec_type === 'video');
-      const audioStream = metadata.streams.find((s) => s.codec_type === 'audio');
+      const videoStream = metadata.streams.find(
+        (s: FfprobeStream) => s.codec_type === 'video'
+      );
+      const audioStream = metadata.streams.find(
+        (s: FfprobeStream) => s.codec_type === 'audio'
+      );
       const format = metadata.format;
 
       if (!videoStream) return reject(new Error('No video stream found'));
@@ -231,7 +239,7 @@ export const extractAudioFromVideo = (videoPath: string): Promise<string> => {
       .audioCodec('libmp3lame')
       .output(audioPath)
       .on('end', () => resolve(audioPath))
-      .on('error', reject)
+      .on('error', (err: unknown) => reject(err))
       .run();
   });
 };

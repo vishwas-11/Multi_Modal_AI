@@ -43,6 +43,15 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 // ─── Health ───────────────────────────────────────────────────────────────────
+app.get('/', (_req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Multi-modal backend is running',
+    health: '/health',
+    apiBase: '/api',
+  });
+});
+
 app.get('/health', (_req, res) => {
   res.status(200).json({
     status: 'ok',

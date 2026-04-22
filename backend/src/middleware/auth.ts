@@ -13,23 +13,32 @@ interface JwtPayload {
   exp: number;
 }
 
-export const authenticate = async (
+const resolveToken = (req: AuthRequest, allowQueryToken: boolean): string | undefined => {
+  // Check Authorization header
+  if (req.headers.authorization?.startsWith('Bearer ')) {
+    return req.headers.authorization.split(' ')[1];
+  }
+
+  // Check cookie as fallback
+  if (req.cookies?.token) {
+    return req.cookies.token;
+  }
+
+  // Allow query token only for explicitly scoped routes (e.g. SSE/download)
+  if (allowQueryToken && typeof req.query.token === 'string') {
+    return req.query.token;
+  }
+
+  return undefined;
+};
+
+const authenticateRequest = (allowQueryToken = false) => async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    let token: string | undefined;
-
-    // Check Authorization header
-    if (req.headers.authorization?.startsWith('Bearer ')) {
-      token = req.headers.authorization.split(' ')[1];
-    }
-
-    // Check cookie as fallback
-    if (!token && req.cookies?.token) {
-      token = req.cookies.token;
-    }
+    const token = resolveToken(req, allowQueryToken);
 
     if (!token) {
       res.status(401).json({
@@ -77,6 +86,9 @@ export const authenticate = async (
     next(error);
   }
 };
+
+export const authenticate = authenticateRequest(false);
+export const authenticateWithQueryToken = authenticateRequest(true);
 
 // Generate JWT
 export const generateToken = (userId: string, email: string): string => {

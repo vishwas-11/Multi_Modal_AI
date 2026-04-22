@@ -37,6 +37,17 @@ import {
 
 import { deleteFile } from '../utils/fileUtils';
 
+const ensureMediaType = (
+  res: Response,
+  actualType: string,
+  allowedTypes: string[]
+): boolean => {
+  if (allowedTypes.includes(actualType)) return true;
+
+  sendError(res, `Invalid media type. Expected: ${allowedTypes.join(' or ')}`, 400);
+  return false;
+};
+
 // ─────────────────────────────────────────
 // IMAGE ANALYSIS
 // ─────────────────────────────────────────
@@ -46,6 +57,7 @@ export const analyzeImageMedia = asyncHandler(async (req: AuthRequest, res: Resp
 
   const media = await Media.findOne({ _id: mediaId, uploadedBy: req.user!._id });
   if (!media) return sendError(res, 'Media not found', 404);
+  if (!ensureMediaType(res, media.type, ['image'])) return;
 
   const tempPath = path.join(process.cwd(), 'src/uploads', `img-${uuidv4()}.jpg`);
 
@@ -73,6 +85,7 @@ export const ocrImageMedia = asyncHandler(async (req: AuthRequest, res: Response
 
   const media = await Media.findOne({ _id: mediaId, uploadedBy: req.user!._id });
   if (!media) return sendError(res, 'Media not found', 404);
+  if (!ensureMediaType(res, media.type, ['image'])) return;
 
   const tempPath = path.join(process.cwd(), 'src/uploads', `ocr-${uuidv4()}.jpg`);
 
@@ -105,6 +118,7 @@ export const analyzeVideoMedia = asyncHandler(async (req: AuthRequest, res: Resp
 
   const media = await Media.findOne({ _id: mediaId, uploadedBy: req.user!._id });
   if (!media) return sendError(res, 'Media not found', 404);
+  if (!ensureMediaType(res, media.type, ['video'])) return;
 
   const { frames, metadata, tempDir, tempVideoPath, audioPath } =
     await processVideoForAnalysis(media.url);
@@ -130,6 +144,7 @@ export const analyzeAudioMedia = asyncHandler(async (req: AuthRequest, res: Resp
 
   const media = await Media.findOne({ _id: mediaId, uploadedBy: req.user!._id });
   if (!media) return sendError(res, 'Media not found', 404);
+  if (!ensureMediaType(res, media.type, ['audio'])) return;
 
   const audioAnalysis = await analyzeAudioFromUrl(media.url);
 
@@ -154,6 +169,7 @@ export const analyzeDocumentMedia = asyncHandler(async (req: AuthRequest, res: R
 
   const media = await Media.findOne({ _id: mediaId, uploadedBy: req.user!._id });
   if (!media) return sendError(res, 'Media not found', 404);
+  if (!ensureMediaType(res, media.type, ['document'])) return;
 
   const tempPath = await downloadDocumentToTempWithFallback(
     media.url,
@@ -186,6 +202,7 @@ export const structuredExtractMedia = asyncHandler(async (req: AuthRequest, res:
 
   const media = await Media.findOne({ _id: mediaId, uploadedBy: req.user!._id });
   if (!media) return sendError(res, 'Media not found', 404);
+  if (!ensureMediaType(res, media.type, ['image'])) return;
 
   const tempPath = await downloadDocumentToTempWithFallback(
     media.url,
@@ -209,6 +226,7 @@ export const analyzeChartMedia = asyncHandler(async (req: AuthRequest, res: Resp
 
   const media = await Media.findOne({ _id: mediaId, uploadedBy: req.user!._id });
   if (!media) return sendError(res, 'Media not found', 404);
+  if (!ensureMediaType(res, media.type, ['image'])) return;
 
   const tempPath = path.join(process.cwd(), 'src/uploads', `chart-${uuidv4()}.jpg`);
 
@@ -229,6 +247,7 @@ export const temporalVideoQA = asyncHandler(async (req: AuthRequest, res: Respon
 
   const media = await Media.findOne({ _id: mediaId, uploadedBy: req.user!._id });
   if (!media) return sendError(res, 'Media not found', 404);
+  if (!ensureMediaType(res, media.type, ['video'])) return;
 
   const { frames, tempDir, tempVideoPath, audioPath } = await processVideoForAnalysis(media.url);
   try {
@@ -244,6 +263,7 @@ export const analyzeMultiPageDocument = asyncHandler(async (req: AuthRequest, re
 
   const media = await Media.findOne({ _id: mediaId, uploadedBy: req.user!._id });
   if (!media) return sendError(res, 'Media not found', 404);
+  if (!ensureMediaType(res, media.type, ['document'])) return;
 
   const tempPath = await downloadDocumentToTempWithFallback(
     media.url,

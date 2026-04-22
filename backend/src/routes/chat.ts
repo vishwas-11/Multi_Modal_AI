@@ -9,20 +9,19 @@ import {
   clearConversation,
   exportConversation,
 } from '../controllers/chatController';
-import { authenticate } from '../middleware/auth';
+import { authenticate, authenticateWithQueryToken } from '../middleware/auth';
 import { chatValidator, validate } from '../middleware/validators';
 
 const router = Router();
-router.use(authenticate);
 
-router.post('/',        chatValidator, validate, chat);
-router.get('/stream',   streamChat);
+router.post('/',        authenticate, chatValidator, validate, chat);
+router.get('/stream',   authenticateWithQueryToken, streamChat);
 
-router.get('/conversations',         getConversations);
-router.get('/conversations/:id',     getConversation);
-router.delete('/conversations/:id',  deleteConversation);
-router.post('/conversations/:id/regenerate', regenerateLastResponse);
-router.post('/conversations/:id/clear',      clearConversation);
-router.get('/conversations/:id/export',      exportConversation);
+router.get('/conversations',         authenticate, getConversations);
+router.get('/conversations/:id',     authenticate, getConversation);
+router.delete('/conversations/:id',  authenticate, deleteConversation);
+router.post('/conversations/:id/regenerate', authenticate, regenerateLastResponse);
+router.post('/conversations/:id/clear',      authenticate, clearConversation);
+router.get('/conversations/:id/export',      authenticateWithQueryToken, exportConversation);
 
 export default router;

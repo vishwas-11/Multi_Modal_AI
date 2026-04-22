@@ -6,7 +6,7 @@ import type { Media, UploadProgress } from '@/types';
 
 export const useUpload = () => {
   const [uploads, setUploads] = useState<UploadProgress[]>([]);
-  const { addToGallery } = useMediaStore();
+  const { addToGallery, setSelectedMedia, selectedMediaIds } = useMediaStore();
 
   const uploadFiles = useCallback(async (files: File[]): Promise<Media[]> => {
     const initial: UploadProgress[] = files.map((f) => ({
@@ -33,6 +33,9 @@ export const useUpload = () => {
 
       // Add to gallery and mark done
       mediaList.forEach((m) => addToGallery(m));
+      // Auto-select uploaded media for the next chat message.
+      const uploadedIds = mediaList.map((m) => String(m.id));
+      setSelectedMedia([...selectedMediaIds, ...uploadedIds]);
       setUploads((prev) =>
         prev.map((u, i) => ({ ...u, status: 'done', result: mediaList[i] }))
       );
@@ -46,18 +49,19 @@ export const useUpload = () => {
       );
       throw err;
     }
-  }, [addToGallery]);
+  }, [addToGallery, selectedMediaIds, setSelectedMedia]);
 
   const uploadClipboard = useCallback(async (imageData: string): Promise<Media> => {
     try {
       const res = await uploadApi.uploadClipboard(imageData);
       addToGallery(res.data.data);
+      setSelectedMedia([...selectedMediaIds, String(res.data.data.id)]);
       return res.data.data;
     } catch (err: unknown) {
       const e = err as { displayMessage?: string };
       throw new Error(e.displayMessage || 'Clipboard upload failed');
     }
-  }, [addToGallery]);
+  }, [addToGallery, selectedMediaIds, setSelectedMedia]);
 
   const clearUploads = useCallback(() => setUploads([]), []);
 

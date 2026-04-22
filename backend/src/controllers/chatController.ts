@@ -163,6 +163,17 @@ const prepareMediaForGemini = async (
   return { imageParts, textContext: textParts.join('\n\n') };
 };
 
+const filterOwnedMediaObjectIds = async (
+  mediaIds: string[],
+  userId: mongoose.Types.ObjectId
+): Promise<mongoose.Types.ObjectId[]> => {
+  const validIds = mediaIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
+  if (validIds.length === 0) return [];
+
+  const owned = await Media.find({ _id: { $in: validIds }, uploadedBy: userId }).select('_id');
+  return owned.map((m) => m._id);
+};
+
 const buildGeminiHistory = async (
   conversationId: mongoose.Types.ObjectId | string,
   userId: mongoose.Types.ObjectId,
@@ -227,10 +238,11 @@ export const chat = asyncHandler(
 
     const response = await chatWithContext([...history, userMsg], SYSTEM_PROMPT);
 
+    const ownedMediaIds = await filterOwnedMediaObjectIds(mediaIds, userId);
     conversation.messages.push({
       role: 'user',
       content: message,
-      mediaIds: mediaIds.map((id: string) => new mongoose.Types.ObjectId(id)),
+      mediaIds: ownedMediaIds,
       timestamp: new Date(),
     });
     conversation.messages.push({ role: 'assistant', content: response, timestamp: new Date() });
@@ -257,6 +269,7 @@ export const streamChat = asyncHandler(
         .split(',')
         .map((id) => id.trim())
         .filter((id) => id && id !== 'undefined' && mongoose.Types.ObjectId.isValid(id));
+      const ownedMediaIds = await filterOwnedMediaObjectIds(mediaIds, userId);
 
       let conversation =
         typeof conversationId === 'string'
@@ -268,7 +281,7 @@ export const streamChat = asyncHandler(
           userId,
           title: message.substring(0, 80),
           messages: [],
-          mediaContext: mediaIds.map((id) => new mongoose.Types.ObjectId(id)),
+          mediaContext: ownedMediaIds,
         });
       }
 
@@ -313,7 +326,7 @@ export const streamChat = asyncHandler(
       conversation.messages.push({
         role: 'user',
         content: message,
-        mediaIds: mediaIds.map((id) => new mongoose.Types.ObjectId(id)),
+        mediaIds: ownedMediaIds,
         timestamp: new Date(),
       });
       conversation.messages.push({
@@ -464,7 +477,7 @@ export const exportConversation = asyncHandler(async (req: AuthRequest, res: Res
   }
 
   const ids = conversation.messages.flatMap((m) => m.mediaIds || []);
-  const media = await Media.find({ _id: { $in: ids } });
+  const media = await Media.find({ _id: { $in: ids }, uploadedBy: req.user!._id });
   const mediaMap = new Map(media.map((m) => [m._id.toString(), m]));
 
   const content =

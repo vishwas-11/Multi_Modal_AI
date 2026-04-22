@@ -391,15 +391,38 @@ export const regenerateLastResponse = asyncHandler(async (req: AuthRequest, res:
     return;
   }
 
-  const userMessages = conversation.messages.filter((m) => m.role === 'user');
-  const lastUser = userMessages[userMessages.length - 1];
-  if (!lastUser) {
+  const lastUserIndex = [...conversation.messages]
+    .map((m, index) => ({ role: m.role, index }))
+    .reverse()
+    .find((m) => m.role === 'user')?.index;
+
+  if (lastUserIndex === undefined) {
     sendError(res, 'No user message to regenerate', 400);
     return;
   }
 
-  const reply = await chatWithContext([{ role: 'user', content: lastUser.content }], SYSTEM_PROMPT);
-  conversation.messages.push({ role: 'assistant', content: reply, timestamp: new Date() });
+  const historyForRegeneration = conversation.messages
+    .slice(0, lastUserIndex + 1)
+    .map((msg) => ({
+      role: (msg.role === 'assistant' ? 'model' : 'user') as 'user' | 'model',
+      content: msg.content,
+    }));
+
+  const reply = await chatWithContext(historyForRegeneration, SYSTEM_PROMPT);
+  const replacement = { role: 'assistant' as const, content: reply, timestamp: new Date() };
+  const assistantIndex = lastUserIndex + 1;
+
+  if (conversation.messages[assistantIndex]?.role === 'assistant') {
+    conversation.messages[assistantIndex] = replacement;
+  } else {
+    conversation.messages.splice(assistantIndex, 0, replacement);
+  }
+
+  // Keep only one assistant reply for the regenerated user turn.
+  while (conversation.messages[assistantIndex + 1]?.role === 'assistant') {
+    conversation.messages.splice(assistantIndex + 1, 1);
+  }
+
   await conversation.save();
 
   sendSuccess(res, { message: reply });

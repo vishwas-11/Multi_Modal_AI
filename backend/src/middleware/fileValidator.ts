@@ -116,7 +116,17 @@ export const validateUploadedFiles = async (
   res: Response,
   next: NextFunction
 ): Promise<void> => {
-  const files = (req.files as Express.Multer.File[]) || (req.file ? [req.file] : []);
+  const normalizeFiles = (
+    files: Request['files'] | undefined,
+    file: Request['file'] | undefined
+  ): Express.Multer.File[] => {
+    if (Array.isArray(files)) return files as Express.Multer.File[];
+    if (files && typeof files === 'object') return Object.values(files).flat();
+    if (file) return [file];
+    return [];
+  };
+
+  const files = normalizeFiles(req.files, req.file);
 
   if (files.length === 0) {
     next();

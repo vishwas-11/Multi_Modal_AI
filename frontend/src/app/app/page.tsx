@@ -99,9 +99,13 @@ export default function AppPage() {
           {/* Panel switcher bar */}
           <div className="flex items-center gap-1 px-3 py-1.5 border-b border-[var(--border-dim)] bg-[var(--bg-deep)]">
             {[
-              { id: 'chat' as RightPanel, label: 'Chat' },
-              { id: 'preview' as RightPanel, label: 'Preview' },
-              { id: 'compare' as RightPanel, label: `Compare${selectedMediaIds.length >= 2 ? ` (${selectedMediaIds.length})` : ''}` },
+              { id: 'chat' as RightPanel, label: 'Chat', disabled: false },
+              { id: 'preview' as RightPanel, label: 'Preview', disabled: false },
+              {
+                id: 'compare' as RightPanel,
+                label: `Compare${selectedMediaIds.length >= 2 ? ` (${selectedMediaIds.length})` : ''}`,
+                disabled: selectedMediaIds.length < 2,
+              },
             ].map(({ id, label, disabled }) => (
               <button
                 key={id}

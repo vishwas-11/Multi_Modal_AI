@@ -101,7 +101,16 @@ const getMimeCategory = (mime) => {
  * Run this AFTER multer
  */
 const validateUploadedFiles = async (req, res, next) => {
-    const files = req.files || (req.file ? [req.file] : []);
+    const normalizeFiles = (files, file) => {
+        if (Array.isArray(files))
+            return files;
+        if (files && typeof files === 'object')
+            return Object.values(files).flat();
+        if (file)
+            return [file];
+        return [];
+    };
+    const files = normalizeFiles(req.files, req.file);
     if (files.length === 0) {
         next();
         return;

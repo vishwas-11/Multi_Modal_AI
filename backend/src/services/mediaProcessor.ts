@@ -82,7 +82,7 @@ export const extractVideoPosterFrame = async (
       .output(posterPath)
       .outputOptions(['-vf', 'scale=640:-1', '-q:v', '3'])
       .on('end', () => resolve())
-      .on('error', (err) => reject(new Error(`Poster frame failed: ${err.message}`)))
+      .on('error', (err: Error) => reject(new Error(`Poster frame failed: ${err.message}`)))
       .run();
   });
 
@@ -126,7 +126,7 @@ export const generateAudioWaveform = async (
         .format('s16le')
         .output(rawPath)
         .on('end', () => resolve())
-        .on('error', (err) => reject(new Error(`Waveform extraction failed: ${err.message}`)))
+        .on('error', (err: Error) => reject(new Error(`Waveform extraction failed: ${err.message}`)))
         .run();
     });
 

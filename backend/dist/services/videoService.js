@@ -27,8 +27,10 @@ if (ffprobe_static_1.default.path) {
 const getVideoMetadata = (videoPath) => {
     return new Promise((resolve, reject) => {
         fluent_ffmpeg_1.default.ffprobe(videoPath, (err, metadata) => {
-            if (err)
-                return reject(new Error(`FFprobe failed: ${err.message}`));
+            if (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                return reject(new Error(`FFprobe failed: ${message}`));
+            }
             const videoStream = metadata.streams.find((s) => s.codec_type === 'video');
             const audioStream = metadata.streams.find((s) => s.codec_type === 'audio');
             const format = metadata.format;
@@ -172,7 +174,7 @@ const extractAudioFromVideo = (videoPath) => {
             .audioCodec('libmp3lame')
             .output(audioPath)
             .on('end', () => resolve(audioPath))
-            .on('error', reject)
+            .on('error', (err) => reject(err))
             .run();
     });
 };

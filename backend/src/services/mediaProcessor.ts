@@ -5,6 +5,7 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { uploadFilePathToCloudinary } from './cloudinaryService';
 import { deleteFile } from '../utils/fileUtils';
+import type { FfprobeData } from 'fluent-ffmpeg';
 
 export interface ThumbnailResult {
   url: string;
@@ -173,7 +174,7 @@ export const generateAudioWaveform = async (
  */
 export const getAudioDuration = (audioPath: string): Promise<number> => {
   return new Promise((resolve, reject) => {
-    ffmpeg.ffprobe(audioPath, (err, metadata) => {
+    ffmpeg.ffprobe(audioPath, (err: unknown, metadata: FfprobeData) => {
       if (err) {
         resolve(0); // Non-fatal
         return;

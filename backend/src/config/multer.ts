@@ -28,10 +28,18 @@ const ALL_ALLOWED = Object.values(ALLOWED_MIME_TYPES).flat();
 
 // Disk storage
 const storage = multer.diskStorage({
-  destination: (_req: Request, _file: Express.Multer.File, cb) => {
+  destination: (
+    _req: Request,
+    _file: Express.Multer.File,
+    cb: (error: Error | null, destination: string) => void
+  ) => {
     cb(null, uploadDir);
   },
-  filename: (_req: Request, file: Express.Multer.File, cb) => {
+  filename: (
+    _req: Request,
+    file: Express.Multer.File,
+    cb: (error: Error | null, filename: string) => void
+  ) => {
     const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, `upload-${uniqueSuffix}${ext}`);

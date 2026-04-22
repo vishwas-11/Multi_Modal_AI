@@ -320,7 +320,7 @@ export default function UseCases() {
             </span>
           </div>
           <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-neutral-600">
-            Powered by Gemini 1.5 Pro + Groq Whisper
+            Powered by Gemini + Groq Whisper
           </p>
         </div>
       </div>

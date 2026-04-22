@@ -233,7 +233,10 @@ export const deleteMedia = asyncHandler(async (req: AuthRequest, res: Response) 
     return;
   }
 
-  await deleteFromCloudinary(media.publicId, 'image');
+  const resourceType =
+    media.type === 'image' ? 'image' : media.type === 'video' ? 'video' : media.type === 'audio' ? 'video' : 'raw';
+
+  await deleteFromCloudinary(media.publicId, resourceType);
   await media.deleteOne();
 
   sendSuccess(res, {}, 'Deleted');

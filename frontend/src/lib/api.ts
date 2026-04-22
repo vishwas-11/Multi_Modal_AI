@@ -6,10 +6,10 @@ import type {
   AnalysisRequest,
 } from '@/types';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+const BASE_URL = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/+$/, '');
 
 export const api = axios.create({
-  baseURL: `${BASE_URL}/api`,
+  baseURL: BASE_URL ? `${BASE_URL}/api` : '/api',
   timeout: 120000,
   headers: { 'Content-Type': 'application/json' },
 });

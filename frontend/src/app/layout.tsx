@@ -46,6 +46,7 @@
 import type { Metadata } from 'next';
 import { IBM_Plex_Mono, Syne } from 'next/font/google';
 import './globals.css';
+import ToasterProvider from '@/components/ui/ToasterProvider';
 
 const syne = Syne({
   variable: '--font-heading',
@@ -72,6 +73,7 @@ export default function RootLayout({
       className={`${syne.variable} ${ibmPlexMono.variable} h-full w-full antialiased`}
     >
       <body className="flex min-h-full w-full flex-col overflow-x-hidden bg-neutral-950 text-white">
+        <ToasterProvider />
         {children}
       </body>
     </html>

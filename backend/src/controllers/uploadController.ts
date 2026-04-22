@@ -226,7 +226,7 @@ export const getMediaById = asyncHandler(async (req: AuthRequest, res: Response)
  * DELETE MEDIA
  */
 export const deleteMedia = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const media = await Media.findById(req.params.id);
+  const media = await Media.findOne({ _id: req.params.id, uploadedBy: req.user!._id });
 
   if (!media) {
     sendError(res, 'Not found', 404);

@@ -158,7 +158,7 @@ const extractFrameAtTimestamp = (
       .output(outputPath)
       .outputOptions(['-vf', 'scale=1024:-1', '-q:v', '3'])
       .on('end', () => resolve())
-      .on('error', (err) => reject(err))
+      .on('error', (err: Error) => reject(err))
       .run();
   });
 };

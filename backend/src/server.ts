@@ -23,6 +23,14 @@ import mediaRoutes   from './routes/media';
 const app = express();
 const PORT = parseInt(process.env.PORT || '5000', 10);
 
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  process.env.FRONTEND_URL,
+  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
+]
+  .filter((origin): origin is string => Boolean(origin))
+  .map((origin) => origin.trim().replace(/\/+$/, ''));
+
 // Ensure upload dir
 const uploadDir = path.join(process.cwd(), 'src/uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
@@ -30,7 +38,14 @@ if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({
-  origin: process.env.CLIENT_URL,
+  origin: (origin, callback) => {
+    // Allow non-browser clients (no Origin header).
+    if (!origin) return callback(null, true);
+
+    const normalizedOrigin = origin.replace(/\/+$/, '');
+    const isAllowed = allowedOrigins.includes(normalizedOrigin);
+    return callback(isAllowed ? null : new Error('Not allowed by CORS'), isAllowed);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],

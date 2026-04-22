@@ -5,15 +5,31 @@ import { chatApi } from '@/lib/api';
 
 export const useSSE = () => {
   const eventSourceRef = useRef<EventSource | null>(null);
+  const partialContentRef = useRef<string>('');
+  const conversationIdRef = useRef<string>('');
   const { setStreaming, appendStreamChunk, finalizeStream, addMessage, setError } = useChatStore();
 
-  const stopStream = useCallback(() => {
+  const stopStream = useCallback((opts?: { commitPartial?: boolean }) => {
+    const commitPartial = opts?.commitPartial !== false;
+
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
+
+    if (commitPartial && partialContentRef.current.trim().length > 0) {
+      // Preserve the streamed text in the UI when user stops early.
+      addMessage({
+        role: 'assistant',
+        content: partialContentRef.current,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    partialContentRef.current = '';
+    conversationIdRef.current = '';
     setStreaming(false);
-  }, [setStreaming]);
+  }, [addMessage, setStreaming]);
 
   const sendStreamMessage = useCallback((
     message: string,
@@ -21,7 +37,7 @@ export const useSSE = () => {
     mediaIds?: string[]
   ) => {
     // Close any existing stream
-    stopStream();
+    stopStream({ commitPartial: true });
 
     // Add user message to UI immediately
     addMessage({
@@ -39,22 +55,28 @@ export const useSSE = () => {
 
     let fullContent = '';
     let finalConversationId = conversationId || '';
+    partialContentRef.current = '';
+    conversationIdRef.current = finalConversationId;
 
     es.addEventListener('conversation', (e) => {
       const data = JSON.parse(e.data);
       finalConversationId = data.conversationId;
+      conversationIdRef.current = finalConversationId;
     });
 
     es.addEventListener('chunk', (e) => {
       const data = JSON.parse(e.data);
       if (data.text) {
         fullContent += data.text;
+        partialContentRef.current = fullContent;
         appendStreamChunk(data.text);
       }
     });
 
     es.addEventListener('done', () => {
       finalizeStream(fullContent, finalConversationId);
+      partialContentRef.current = '';
+      conversationIdRef.current = '';
       es.close();
       eventSourceRef.current = null;
     });
@@ -66,12 +88,12 @@ export const useSSE = () => {
       } catch {
         setError('Stream connection failed');
       }
-      stopStream();
+      stopStream({ commitPartial: false });
     });
 
     es.onerror = () => {
       if (es.readyState === EventSource.CLOSED) {
-        stopStream();
+        stopStream({ commitPartial: false });
       }
     };
 

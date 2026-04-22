@@ -39,6 +39,52 @@ let client: GoogleGenerativeAI;
 let visionModel: GenerativeModel;
 let textModel: GenerativeModel;
 
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+const isRetryableGeminiError = (err: unknown): boolean => {
+  const msg =
+    typeof err === 'object' && err !== null && 'message' in err
+      ? String((err as { message?: unknown }).message || '')
+      : String(err || '');
+
+  const lowered = msg.toLowerCase();
+  return (
+    lowered.includes('service unavailable') ||
+    lowered.includes('overloaded') ||
+    lowered.includes('resource_exhausted') ||
+    lowered.includes('rate limit') ||
+    lowered.includes('[503') ||
+    lowered.includes(' 503') ||
+    lowered.includes('[429') ||
+    lowered.includes(' 429') ||
+    lowered.includes('deadline') ||
+    lowered.includes('timeout')
+  );
+};
+
+const withRetry = async <T>(
+  fn: () => Promise<T>,
+  label: string,
+  maxAttempts = 3
+): Promise<T> => {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (!isRetryableGeminiError(err) || attempt === maxAttempts) break;
+      const delay = 500 * 2 ** (attempt - 1);
+      console.warn(`Gemini transient error (${label}) retry ${attempt}/${maxAttempts} after ${delay}ms`);
+      await sleep(delay);
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+};
+
 const getClient = () => {
   if (!client) {
     if (!process.env.GEMINI_API_KEY) {
@@ -301,7 +347,7 @@ export const chatWithContext = async (
     }
   }
 
-  const result = await chat.sendMessage(lastParts);
+  const result = await withRetry(() => chat.sendMessage(lastParts), 'chat.sendMessage');
   return result.response.text();
 };
 
@@ -336,7 +382,8 @@ export const streamChatWithContext = async (
     }
   }
 
-  return chat.sendMessageStream(lastParts);
+  // Retry only stream initialization (not mid-stream chunks).
+  return withRetry(() => chat.sendMessageStream(lastParts), 'chat.sendMessageStream');
 };
 
 export const summarizeConversationContext = async (context: string): Promise<string> => {

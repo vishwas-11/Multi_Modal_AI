@@ -1,0 +1,24 @@
+.cursor
+.DS_Store
+
+# env
+.env
+**/.env
+
+# deps
+**/node_modules
+
+# builds
+backend/dist
+backend/dist/**
+frontend/.next
+frontend/.next/**
+frontend/out
+frontend/out/**
+
+# logs
+**/*.log
+
+# local uploads/temp
+backend/src/uploads/*
+!backend/src/uploads/.gitkeep
